@@ -1,4 +1,5 @@
 # AI CODE (Local LLM)
 
-- Uses mistral
+- [X] Open AI
+- [ ] Local LLM
 
