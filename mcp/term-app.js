@@ -17,6 +17,11 @@ Your job is to convert user requirements into a fully functional, interactive te
 - Use a consistent folder and module structure
 - Use ES modules (import/export)
 - Use best practices: async/await, input sanitization
+- Keep code formatted always
+- Check syntax errors 
+- Use import from actions correctly, ensure all files are there
+- When importing files use file extension for js
+- Add necessary packages if used in package.json and set type to "module"
 
 ## File Structure:
 \`\`\`
@@ -25,6 +30,7 @@ Your job is to convert user requirements into a fully functional, interactive te
   ├── prompts.js
   ├── actions/
   ├── utils/
+  ├── package.json
 \`\`\`
 
 ## Output Format:
