@@ -5,6 +5,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import OpenAI from "openai";
 import ollama from 'ollama';
+import ora from 'ora';
+
 import 'dotenv/config';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -171,10 +173,10 @@ async function generateCodeWithModel(projectIdea, mcp, model) {
 }
 
 async function generateCodeWithModelStream(projectIdea, mcp, model) {
-  console.log(chalk.blue(`\n💡 Streaming code with ${model}...\n`));
-
   const isOllamaModel = model.includes(":");
   let fullResponse = "";
+
+  const spinner = ora(`🛠 Generating code with ${model}...`).start();
 
   try {
     if (isOllamaModel) {
@@ -186,6 +188,9 @@ async function generateCodeWithModelStream(projectIdea, mcp, model) {
           { role: "user", content: projectIdea },
         ],
       });
+
+      spinner.stop();
+      process.stdout.write(chalk.blue("\n💡 Streaming from Ollama:\n"));
 
       for await (const chunk of stream) {
         const content = chunk.message.content;
@@ -202,6 +207,9 @@ async function generateCodeWithModelStream(projectIdea, mcp, model) {
           { role: "user", content: projectIdea },
         ],
       });
+
+      spinner.stop();
+      process.stdout.write(chalk.blue("\n💡 Streaming from OpenAI:\n"));
 
       for await (const chunk of stream) {
         const content = chunk.choices?.[0]?.delta?.content || "";
@@ -222,11 +230,13 @@ async function generateCodeWithModelStream(projectIdea, mcp, model) {
     return parsed;
 
   } catch (err) {
+    spinner.stop();
     console.error(chalk.red("\n❌ Streaming failed or invalid JSON response"));
     console.log(chalk.gray("\n📦 Raw streamed output:\n" + fullResponse));
     process.exit(1);
   }
 }
+
 
 
 async function saveFiles(output, projectName) {
