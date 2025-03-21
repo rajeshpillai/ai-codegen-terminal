@@ -5,8 +5,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import OpenAI from "openai";
 import 'dotenv/config';
-import mcp from "./mcp.js";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load OpenAI API Key from ENV
 const apiKey = process.env.OPENAI_API_KEY;
@@ -16,11 +16,8 @@ if (!apiKey) {
 }
 
 const openai = new OpenAI({
-    apiKey: apiKey,
+  apiKey: apiKey,
 });
-  
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 
 async function getInputWithEditor(defaultText = "") {
   const { projectIdea } = await inquirer.prompt([
@@ -61,42 +58,91 @@ async function previewPrompt(projectIdea) {
   }
 }
 
+async function selectAppType() {
+  const { appType } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "appType",
+      message: "Which type of app do you want to generate?",
+      choices: [
+        { name: "🌐 Web App", value: "web-app" },
+        { name: "💻 Terminal App (CLI)", value: "term-app" },
+      ]
+    }
+  ]);
+  return appType;
+}
 
-// Function to interact with AI
-export async function generateCodeWithOpenAI(projectIdea, model = "o3-mini") {
-    console.log(chalk.blue("\n💡 Generating Code... Please wait...\n"));
+async function loadMCP(appType) {
+  try {
+    const mcpPath = `./mcp/${appType}.js`;
+    const { default: mcp } = await import(mcpPath, { assert: { type: "javascript" } });
+    return mcp;
+  } catch (error) {
+    console.error(chalk.red(`❌ Failed to load MCP for '${appType}':`), error);
+    process.exit(1);
+  }
+}
+
+function extractJsonFromResponse(text) {
+  // Remove everything before and after the first JSON block
+  const match = text.match(/```json([\s\S]*?)```/);
+  if (match) {
+    return match[1].trim();
+  }
+
+  // Fallback: try extracting first outermost {...}
+  const jsonStart = text.indexOf('{');
+  const jsonEnd = text.lastIndexOf('}');
+  if (jsonStart !== -1 && jsonEnd !== -1) {
+    return text.slice(jsonStart, jsonEnd + 1).trim();
+  }
+
+  throw new Error("No JSON found in the AI response.");
+}
+
+
+async function generateCodeWithOpenAI(projectIdea, mcp, model = "gpt-4") {
+  console.log(chalk.blue("\n💡 Generating Code... Please wait...\n"));
+
+  try {
+    const response = await openai.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: mcp },
+        { role: "user", content: projectIdea },
+      ],
+    });
+
+    const raw = response.choices[0].message.content.trim();
+    let parsed;
 
     try {
-        const response = await openai.chat.completions.create({
-        model: model,
-        messages: [
-            { role: "system", content: mcp },
-            { role: "user", content: projectIdea },
-        ],
-        });
+      const json = extractJsonFromResponse(raw);
+      parsed = JSON.parse(json);
 
-        const aiResponse = response.choices[0].message.content.trim();
-        return JSON.parse(aiResponse); // Convert AI output to JSON
-    } catch (error) {
-        console.error(chalk.red("❌ Error generating code"), error);
-}
+      if (!parsed.codeFiles || typeof parsed.codeFiles !== 'object') {
+        throw new Error("Missing or invalid 'codeFiles' in parsed response.");
+      }
+
+      return parsed;
+
+    } catch (err) {
+      console.error(chalk.red("❌ Failed to parse AI response as valid JSON."));
+      console.log(chalk.gray("\n📦 Raw AI Response:\n" + raw));
+      process.exit(1);
+    }
+
+  } catch (error) {
+    console.error(chalk.red("❌ OpenAI API error:"), error.message || error);
+    process.exit(1);
   }
-  
-async function generateCode(projectIdea) {
-  console.log(chalk.blue("\n💡 Generating code locally with Ollama...\n"));
-  const res = await ollama.chat({
-    model: "codellama", //"mistral",
-    messages: [
-      { role: "system", content: mcp },
-      { role: "user", content: projectIdea },
-    ],
-  });
-  const json = JSON.parse(res.message.content.trim());
-  return json;
 }
 
 async function saveFiles(output, projectName) {
-  const baseDir = path.join(__dirname, projectName);
+  // const baseDir = path.join(__dirname, projectName);
+  const baseDir = path.join(__dirname, 'output', projectName);
+
   console.log(chalk.green(`\n📁 Writing files to ./${projectName}/\n`));
 
   for (const [filePath, content] of Object.entries(output.codeFiles)) {
@@ -110,7 +156,10 @@ async function saveFiles(output, projectName) {
 
 async function main() {
   console.clear();
-  console.log(chalk.cyan("\n🚀 AI Code Generator CLI (Local LLM Edition)\n"));
+  console.log(chalk.cyan("\n🚀 AI Code Generator CLI\n"));
+
+  const appType = await selectAppType();
+  const mcp = await loadMCP(appType);
 
   const { projectName } = await inquirer.prompt([
     {
@@ -124,7 +173,7 @@ async function main() {
   const rawInput = await getInputWithEditor();
   const confirmedPrompt = await previewPrompt(rawInput);
 
-  const output = await generateCodeWithOpenAI(confirmedPrompt);
+  const output = await generateCodeWithOpenAI(confirmedPrompt, mcp);
   await saveFiles(output, projectName);
 }
 

@@ -1,4 +1,4 @@
-module.exports = `
+const mcp  = `
 You are an expert full-stack web developer and AI coding assistant.
 
 Your job is to convert user requirements into complete, modular, and production-ready web applications.
@@ -37,3 +37,5 @@ Return JSON with:
 
 DO NOT return explanations, only the JSON response.
 `;
+
+export default mcp;
