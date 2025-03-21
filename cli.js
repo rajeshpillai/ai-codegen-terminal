@@ -170,6 +170,63 @@ async function generateCodeWithModel(projectIdea, mcp, model) {
   }
 }
 
+async function generateCodeWithModelStream(projectIdea, mcp, model) {
+  console.log(chalk.blue(`\n💡 Streaming code with ${model}...\n`));
+
+  const isOllamaModel = model.includes(":");
+  let fullResponse = "";
+
+  try {
+    if (isOllamaModel) {
+      const stream = await ollama.chat({
+        model,
+        stream: true,
+        messages: [
+          { role: "system", content: mcp },
+          { role: "user", content: projectIdea },
+        ],
+      });
+
+      for await (const chunk of stream) {
+        const content = chunk.message.content;
+        fullResponse += content;
+        process.stdout.write(chalk.gray(content));
+      }
+
+    } else {
+      const stream = await openai.chat.completions.create({
+        model,
+        stream: true,
+        messages: [
+          { role: "system", content: mcp },
+          { role: "user", content: projectIdea },
+        ],
+      });
+
+      for await (const chunk of stream) {
+        const content = chunk.choices?.[0]?.delta?.content || "";
+        fullResponse += content;
+        process.stdout.write(chalk.gray(content));
+      }
+    }
+
+    console.log(); // newline
+
+    const json = extractJsonFromResponse(fullResponse);
+    const parsed = JSON.parse(json);
+
+    if (!parsed.codeFiles || typeof parsed.codeFiles !== "object") {
+      throw new Error("Missing or invalid 'codeFiles' in parsed response.");
+    }
+
+    return parsed;
+
+  } catch (err) {
+    console.error(chalk.red("\n❌ Streaming failed or invalid JSON response"));
+    console.log(chalk.gray("\n📦 Raw streamed output:\n" + fullResponse));
+    process.exit(1);
+  }
+}
 
 
 async function saveFiles(output, projectName) {
@@ -207,7 +264,9 @@ async function main() {
   const rawInput = await getInputWithEditor();
   const confirmedPrompt = await previewPrompt(rawInput);
 
-  const output = await generateCodeWithModel(confirmedPrompt, mcp, model);
+  // const output = await generateCodeWithModel(confirmedPrompt, mcp, model);
+  const output = await generateCodeWithModelStream(confirmedPrompt, mcp, model);
+
   await saveFiles(output, projectName);
 }
 
