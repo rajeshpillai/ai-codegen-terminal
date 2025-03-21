@@ -2,3 +2,5 @@ I want a To-Do app with:
 - User login/signup
 - Add, edit, delete tasks
 - Mark tasks as completed
+
+I don't need auth system yet.
